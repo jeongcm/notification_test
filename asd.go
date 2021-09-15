@@ -1,0 +1,1 @@
+d := "{\"cluster\": { \"owner_group\":{\"id\":1},\"name\":\"OpenStack\",\"type_code\":\"cluster.type.openstack\",\"api_server_url\":\"http://172.16.194.168:5000\",\"credential\": \"{\"methods\": [\"password\"],\"password\": {\"user\": {\"domain\": {\"name\": \"default\"},\"name\": \"admin\",\"password\": \"admin\"}}}\", \"remarks\":\"test OpenStack\"}}"
