@@ -1,8 +1,8 @@
-package broker
+package notification
 
 import (
-	"test/monitor"
 	"context"
+	"test/monitor"
 )
 
 // setSubscribeOption returns a function to setup a context with given value

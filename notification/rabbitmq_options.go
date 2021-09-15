@@ -1,4 +1,4 @@
-package broker
+package notification
 
 import "test/monitor"
 

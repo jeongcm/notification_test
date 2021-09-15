@@ -1,4 +1,4 @@
-package broker
+package notification
 
 // Package rabbitmq provides a RabbitMQ Openstack Monitor
 
@@ -30,14 +30,14 @@ type broker struct {
 }
 
 type subscriber struct {
-	mtx          sync.Mutex
-	mayRun       bool
-	opts         monitor.SubscribeOptions
-	ch           *amqp.Channel
-	queueArgs    map[string]interface{}
-	notifier     *broker
-	fn           func(msg amqp.Delivery)
-	headers      map[string]interface{}
+	mtx       sync.Mutex
+	mayRun    bool
+	opts      monitor.SubscribeOptions
+	ch        *amqp.Channel
+	queueArgs map[string]interface{}
+	notifier  *broker
+	fn        func(msg amqp.Delivery)
+	headers   map[string]interface{}
 }
 
 type publication struct {
@@ -218,7 +218,6 @@ func (b *broker) Connect() error {
 	if err := conn.Connect(b.opts.Secure, &conf); err != nil {
 		return err
 	}
-
 
 	b.conn = conn
 	return nil

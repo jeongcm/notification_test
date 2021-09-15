@@ -1,4 +1,4 @@
-package broker
+package notification
 
 //
 // All credit to Mondo
@@ -25,12 +25,12 @@ var (
 )
 
 type rabbitMQConn struct {
-	Connection      *amqp.Connection
-	accountInfo     string
-	address         string
-	port            string
-	prefetchCount   int
-	prefetchGlobal  bool
+	Connection     *amqp.Connection
+	accountInfo    string
+	address        string
+	port           string
+	prefetchCount  int
+	prefetchGlobal bool
 
 	sync.Mutex
 	connected bool
@@ -191,12 +191,12 @@ func (r *rabbitMQConn) Consume(queue string, autoAck bool) (*amqp.Channel, <-cha
 	}
 
 	deliveries, err := c.Consume(queue,
-	"",              // consumer
-		autoAck,            // auto-ack
-		false,           // exclusive
-		false,           // no local
-		false,           // no wait
-		nil,             // arguments
+		"",      // consumer
+		autoAck, // auto-ack
+		false,   // exclusive
+		false,   // no local
+		false,   // no wait
+		nil,     // arguments
 	)
 	if err != nil {
 		return nil, nil, err

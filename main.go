@@ -3,13 +3,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/streadway/amqp"
 	"log"
+	"net"
+	"net/url"
 	"test/monitor"
+	"test/notification"
 )
 
 type OsloMessage struct {
-	EventType string `json:"event_type"`
+	EventType string                 `json:"event_type"`
 	Payload   map[string]interface{} `json:"payload"`
 }
 
@@ -40,6 +42,36 @@ type ClusterPasswordAuthUser struct {
 // ClusterPasswordAuthUserDomain 클러스터 인증 사용자의 도메인
 type ClusterPasswordAuthUserDomain struct {
 	Name string `json:"name,omitempty"`
+}
+
+func clusterNotificationSubscriber() {
+	go func() {
+		forever := make(chan bool)
+
+		u, _ := url.Parse("http://192.168.10.105:5000")
+		ip, _, _ := net.SplitHostPort(u.Host)
+		fmt.Println(ip)
+
+		b := notification.NewBroker(fmt.Sprintf("%s:%s", "172.16.194.168", "5672"))
+		if err := b.Connect(); err != nil {
+			log.Printf("Could not register to cluster notification. Cause: %+v", err)
+			return
+		}
+		defer func() {
+			_ = b.Disconnect()
+		}()
+
+		s, err := b.Subscribe(1, "notifications.info", subscribeEvent, false)
+		if err != nil {
+			log.Printf("Could not register to cluster notification. Cause: %+v", err)
+			return
+		}
+		defer func() {
+			_ = s.Unsubscribe()
+		}()
+
+		<-forever
+	}()
 }
 
 func subscribeEvent(clusterID int, p monitor.Event) error {
@@ -109,72 +141,72 @@ func subscribeEvent(clusterID int, p monitor.Event) error {
 
 func main() {
 	// Define RabbitMQ server URL.
-	amqpServerURL := "amqp://guest:guest@172.16.194.168:5672/"
-
-	// Create a new RabbitMQ connection.
-	connectRabbitMQ, err := amqp.Dial(amqpServerURL)
-	if err != nil {
-		panic(err)
-	}
-	defer connectRabbitMQ.Close()
-
-	// Opening a channel to our RabbitMQ instance over
-	// the connection we have already established.
-	channelRabbitMQ, err := connectRabbitMQ.Channel()
-	if err != nil {
-		panic(err)
-	}
-	defer channelRabbitMQ.Close()
-	// Subscribing to QueueService1 for getting messages.
-	messages, err := channelRabbitMQ.Consume(
-		"notifications.info", // queue name
-		"",              // consumer
-		true,            // auto-ack
-		false,           // exclusive
-		false,           // no local
-		false,           // no wait
-		nil,             // arguments
-	)
-	if err != nil {
-		log.Println(err)
-	}
-
-	// Build a welcome message.
-	log.Println("Successfully connected to RabbitMQ")
-	log.Println("Waiting for messages")
-
-	// Make a channel to receive messages into infinite loop.
-	forever := make(chan bool)
-
-	go func() {
-		for message := range messages {
-			// For example, show received message in a console.
-			log.Printf("%s\n", message.Body)
-			var e map[string]interface{}
-			if err := json.Unmarshal(message.Body, &e); err != nil {
-				log.Fatalln(err)
-				return
-			}
-
-			var m OsloMessage
-			if err := json.Unmarshal([]byte(e["oslo.message"].(string)), &m); err != nil {
-				log.Fatalln(err)
-				return
-			}
-
-			fmt.Println(m.EventType)
-			fmt.Println(m.Payload)
-
-			switch m.EventType {
-			case "identity.project.created":
-				fmt.Println(m.Payload["id"].(string))
-			case "identity.project.deleted":
-				fmt.Println(m.Payload["id"].(string))
-			}
-		}
-	}()
-
-	<-forever
+	//amqpServerURL := "amqp://guest:guest@172.16.194.168:5672/"
+	//
+	//// Create a new RabbitMQ connection.
+	//connectRabbitMQ, err := amqp.Dial(amqpServerURL)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer connectRabbitMQ.Close()
+	//
+	//// Opening a channel to our RabbitMQ instance over
+	//// the connection we have already established.
+	//channelRabbitMQ, err := connectRabbitMQ.Channel()
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer channelRabbitMQ.Close()
+	//// Subscribing to QueueService1 for getting messages.
+	//messages, err := channelRabbitMQ.Consume(
+	//	"notifications.info", // queue name
+	//	"",              // consumer
+	//	true,            // auto-ack
+	//	false,           // exclusive
+	//	false,           // no local
+	//	false,           // no wait
+	//	nil,             // arguments
+	//)
+	//if err != nil {
+	//	log.Println(err)
+	//}
+	//
+	//// Build a welcome message.
+	//log.Println("Successfully connected to RabbitMQ")
+	//log.Println("Waiting for messages")
+	//
+	//// Make a channel to receive messages into infinite loop.
+	//forever := make(chan bool)
+	//
+	//go func() {
+	//	for message := range messages {
+	//		// For example, show received message in a console.
+	//		log.Printf("%s\n", message.Body)
+	//		var e map[string]interface{}
+	//		if err := json.Unmarshal(message.Body, &e); err != nil {
+	//			log.Fatalln(err)
+	//			return
+	//		}
+	//
+	//		var m OsloMessage
+	//		if err := json.Unmarshal([]byte(e["oslo.message"].(string)), &m); err != nil {
+	//			log.Fatalln(err)
+	//			return
+	//		}
+	//
+	//		fmt.Println(m.EventType)
+	//		fmt.Println(m.Payload)
+	//
+	//		switch m.EventType {
+	//		case "identity.project.created":
+	//			fmt.Println(m.Payload["id"].(string))
+	//		case "identity.project.deleted":
+	//			fmt.Println(m.Payload["id"].(string))
+	//		}
+	//	}
+	//}()
+	//
+	//<-forever
 
 	//d := "{\"methods\": [\"password\"], \"password\": {\"user\": {\"domain\": {\"name\": \"default\"},\"name\": \"admin\",\"password\": \"admin\"}}}"
 	//
@@ -240,21 +272,9 @@ func main() {
 	//	log.Printf("hello")
 	//	log.Printf(c)
 	//}
-	//forever := make(chan bool)
-	//osBroker := broker.NewBroker(fmt.Sprintf("%s:%s","172.16.194.168", "5672"))
-	//err := osBroker.Connect()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//defer func() {
-	//	_ = osBroker.Disconnect()
-	//}()
-	//
-	//_, err = osBroker.Subscribe(1, "notifications.info", subscribeEvent, false)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//<-forever
+	forever := make(chan bool)
+	clusterNotificationSubscriber()
+
+	<-forever
 
 }
