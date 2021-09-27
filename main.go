@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
-	"net/url"
 	"test/monitor"
 	"test/notification"
 )
@@ -48,11 +46,7 @@ func clusterNotificationSubscriber() {
 	go func() {
 		forever := make(chan bool)
 
-		u, _ := url.Parse("http://192.168.10.105:5000")
-		ip, _, _ := net.SplitHostPort(u.Host)
-		fmt.Println(ip)
-
-		b := notification.NewBroker(fmt.Sprintf("%s:%s", "172.16.194.168", "5672"))
+		b := notification.NewBroker(fmt.Sprintf("%s:%s", "192.168.10.32", "5672"))
 		if err := b.Connect(); err != nil {
 			log.Printf("Could not register to cluster notification. Cause: %+v", err)
 			return
@@ -102,10 +96,12 @@ func subscribeEvent(clusterID int, p monitor.Event) error {
 	case "volume.attach.end":
 	case "compute.instance.suspend.end":
 	case "volume.create.end":
-		log.Printf("volume deleted\n")
+		log.Printf("volume created\n")
 
 	case "volume.update.end":
+		log.Printf("volume updated\n")
 	case "volume.delete.end":
+		log.Printf("volume deleted\n")
 	case "snapshot.create.end":
 	case "snapshot.update.end":
 	case "snapshot.delete.end":
@@ -140,8 +136,7 @@ func subscribeEvent(clusterID int, p monitor.Event) error {
 }
 
 func main() {
-	// Define RabbitMQ server URL.
-	//amqpServerURL := "amqp://guest:guest@172.16.194.168:5672/"
+	//amqpServerURL := "amqp://guest:guest@192.168.10.32:5672/"
 	//
 	//// Create a new RabbitMQ connection.
 	//connectRabbitMQ, err := amqp.Dial(amqpServerURL)
