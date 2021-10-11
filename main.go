@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"test/monitor"
-	"test/notification"
+
+	_ "test/notification"
 )
 
 type OsloMessage struct {
@@ -42,33 +43,45 @@ type ClusterPasswordAuthUserDomain struct {
 	Name string `json:"name,omitempty"`
 }
 
-func clusterNotificationSubscriber() {
-	go func() {
-		forever := make(chan bool)
+type notificationSubscriber struct {
+	cluster string
+}
 
-		b := notification.NewBroker(fmt.Sprintf("%s:%s", "192.168.10.32", "5672"))
-		if err := b.Connect(); err != nil {
-			log.Printf("Could not register to cluster notification. Cause: %+v", err)
+func clusterNotificationSubscriber() {
+	ctx := context.Background()
+	go func() {
+		n, err := monitor.New("type.openstack", "http://172.16.194.168:8080")
+		if err != nil {
+			return
+		}
+
+		if err := n.Connect(); err != nil {
+			log.Println(err)
 			return
 		}
 		defer func() {
-			_ = b.Disconnect()
+			_ = n.Disconnect()
 		}()
 
-		s, err := b.Subscribe(1, "notifications.info", subscribeEvent, false)
+		ns := notificationSubscriber{
+			cluster: "test",
+		}
+		s, err := n.Subscribe("notifications.info", ns.subscribeEvent, true)
 		if err != nil {
-			log.Printf("Could not register to cluster notification. Cause: %+v", err)
+			log.Println("failed to register cluster notification subscribe.")
 			return
 		}
 		defer func() {
 			_ = s.Unsubscribe()
 		}()
 
-		<-forever
+		log.Println("Success to register cluster notification subscribe.")
+
+		<-ctx.Done()
 	}()
 }
 
-func subscribeEvent(clusterID int, p monitor.Event) error {
+func (ns *notificationSubscriber) subscribeEvent(p monitor.Event) error {
 	var e map[string]interface{}
 
 	err := json.Unmarshal(p.Message().Body, &e)

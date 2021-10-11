@@ -5,20 +5,27 @@ package notification
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/streadway/amqp"
 	"log"
+	"net"
+	"net/url"
 	"sync"
 	"test/monitor"
 	"time"
 )
 
-// OsloMessage broker event message body 구조체
+func init() {
+	monitor.RegisterClusterMonitorCreationFunc("type.openstack", New)
+}
+
+// OsloMessage notification event message body 구조체
 type OsloMessage struct {
 	EventType string                 `json:"event_type"`
 	Payload   map[string]interface{} `json:"payload"`
 }
 
-type broker struct {
+type notification struct {
 	conn           *rabbitMQConn
 	opts           monitor.Options
 	prefetchCount  int
@@ -35,7 +42,7 @@ type subscriber struct {
 	opts      monitor.SubscribeOptions
 	ch        *amqp.Channel
 	queueArgs map[string]interface{}
-	notifier  *broker
+	notifier  *notification
 	fn        func(msg amqp.Delivery)
 	headers   map[string]interface{}
 }
@@ -130,18 +137,18 @@ func (s *subscriber) resubscribe() {
 
 // 큐를 지속적으로 유지하기위해 DurableQueue옵션, 데이터 안정성을 위해 DisableAutoAck, AckOnSuccess를 사용한다
 // 특히 핸들러 에러 시 메시지의 requeue여부를 플래그로 전달하며 이 플래그에 따라 RequeueOnError() 옵션을 호출한다.
-func (b *broker) Subscribe(clusterID int, queueName string, handler monitor.Handler, requeueOnError bool, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
+func (n *notification) Subscribe(queueName string, handler monitor.Handler, requeueOnError bool, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
 	opts = append(opts, monitor.Queue(queueName), monitor.DisableAutoAck())
 
 	if requeueOnError == true {
 		opts = append(opts, RequeueOnError())
 	}
 
-	return b.subscribe(clusterID, handler, opts...)
+	return n.subscribe(handler, opts...)
 }
 
-func (b *broker) subscribe(clusterID int, handler monitor.Handler, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
-	if b.conn == nil {
+func (n *notification) subscribe(handler monitor.Handler, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
+	if n.conn == nil {
 		return nil, errors.New("not connected openstack notification")
 	}
 
@@ -177,19 +184,19 @@ func (b *broker) subscribe(clusterID int, handler monitor.Handler, opts ...monit
 		}
 
 		p := &publication{d: msg, m: m, t: msg.RoutingKey}
-		p.err = handler(clusterID, p)
+		p.err = handler(p)
 		if p.err == nil && !options.AutoAck {
 			if err := msg.Ack(false); err != nil {
-				log.Printf("could not acknowledge on a delivery. cause: %v", err)
+				log.Printf("could not acknowledge on a delivery. cause: %v\n", err)
 			}
 		} else if p.err != nil && !options.AutoAck {
 			if err := msg.Nack(false, requeueOnError); err != nil {
-				log.Printf("could not negatively acknowledge on a delivery. cause: %v", err)
+				log.Printf("could not negatively acknowledge on a delivery. cause: %v\n", err)
 			}
 		}
 	}
 
-	sret := &subscriber{opts: options, mayRun: true, notifier: b,
+	sret := &subscriber{opts: options, mayRun: true, notifier: n,
 		fn: fn, headers: headers, queueArgs: qArgs}
 
 	go sret.resubscribe()
@@ -197,63 +204,64 @@ func (b *broker) subscribe(clusterID int, handler monitor.Handler, opts ...monit
 	return sret, nil
 }
 
-func (b *broker) Options() monitor.Options {
-	return b.opts
+func (n *notification) Options() monitor.Options {
+	return n.opts
 }
 
-func (b *broker) Connect() error {
-	conn := b.conn
+func (n *notification) Connect() error {
+	conn := n.conn
 
-	if b.conn == nil {
+	if n.conn == nil {
 		conn = newRabbitMQConn(
 			0,
 			false,
-			b.auth,
-			b.address)
+			n.auth,
+			n.address)
 	}
 
 	conf := defaultAmqpConfig
-	conf.TLSClientConfig = b.opts.TLSConfig
+	conf.TLSClientConfig = n.opts.TLSConfig
 
-	if err := conn.Connect(b.opts.Secure, &conf); err != nil {
+	if err := conn.Connect(n.opts.Secure, &conf); err != nil {
 		return err
 	}
 
-	b.conn = conn
+	n.conn = conn
 	return nil
 }
 
-func (b *broker) Disconnect() error {
-	if b.conn == nil {
+func (n *notification) Disconnect() error {
+	if n.conn == nil {
 		return errors.New("connection is nil")
 	}
-	b.mtx.Lock()
-	ret := b.conn.Close()
-	b.mtx.Unlock()
+	n.mtx.Lock()
+	ret := n.conn.Close()
+	n.mtx.Unlock()
 
-	b.wg.Wait() // wait all goroutines
+	n.wg.Wait() // wait all goroutines
 	return ret
 }
 
-// NewBroker 함수는 새로운 monitor interface 를 생성한다.
-func NewBroker(address string, opts ...monitor.Option) monitor.Monitor {
+// New 함수는 새로운 monitor interface 를 생성한다.
+func New(serverURL string) monitor.Monitor {
 	//TODO auth 의 경우 임시로 ID:PASSWORD(ex.guest:guest)를 쓰지만
 	//	   사용자 입력에 의한 Cluster 의 MetaData 로 저장될 필요가 있음.
-	//     address 도 마찬가지로 임시로 client 의 api server url 과 고정된 port(ex.192.168.1.1:5672) 를 쓰지만
+	//     마찬가지로 임시로 client 의 api server url 과 고정된 port(ex.192.168.1.1:5672) 를 쓰지만
 	//     사용자 입력에 의한 Cluster 의 MetaData 로 저장될 필요가 있음.
 	auth := "guest:guest"
+	defaultPort := "5672"
+
+	u, _ := url.Parse(serverURL)
+	ip, _, _ := net.SplitHostPort(u.Host)
 
 	options := monitor.Options{
 		Context: context.Background(),
 	}
 
-	for _, o := range opts {
-		o(&options)
-	}
-
-	return &broker{
+	log.Println(fmt.Sprintf("%s:%s", ip, defaultPort))
+	return &notification{
 		opts:    options,
 		auth:    auth,
-		address: address,
+		address: fmt.Sprintf("%s:%s", ip, defaultPort),
 	}
 }

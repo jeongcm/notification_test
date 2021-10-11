@@ -163,7 +163,7 @@ func (r *rabbitMQConn) doTryConnect(secure bool, config *amqp.Config) error {
 
 	r.Connection, err = amqp.DialConfig(url, *config)
 	if err == nil { //Connection success
-		log.Printf("connect success, %v", r.Connection.Config.Dial)
+		log.Println("success to connect openstack notification.")
 		return nil
 	}
 
@@ -201,11 +201,6 @@ func (r *rabbitMQConn) Consume(queue string, autoAck bool) (*amqp.Channel, <-cha
 	if err != nil {
 		return nil, nil, err
 	}
-
-	//deliveries, err := consumerChannel.ConsumeQueue(queue, autoAck)
-	//if err != nil {
-	//	return nil, nil, err
-	//}
 
 	return c, deliveries, nil
 }
