@@ -5,11 +5,9 @@ package notification
 //
 
 import (
-	"crypto/tls"
 	"errors"
 	"github.com/streadway/amqp"
 	"log"
-	"strings"
 	"sync"
 	"time"
 )
@@ -22,6 +20,8 @@ var (
 		Heartbeat: 10 * time.Second,
 		Locale:    "en_US",
 	}
+
+	openstackExchange = []string{"cinder", "nova", "keystone", "neutron"}
 )
 
 type rabbitMQConn struct {
@@ -39,6 +39,14 @@ type rabbitMQConn struct {
 	waitConnection chan struct{}
 }
 
+// Exchange is the rabbitmq exchange
+type Exchange struct {
+	// Name of the exchange
+	Name string
+	// Whether its persistent
+	Durable bool
+}
+
 func newRabbitMQConn(prefetchCount int, prefetchGlobal bool, accountInfo string, address string) *rabbitMQConn {
 	ret := &rabbitMQConn{
 		prefetchCount:  prefetchCount,
@@ -54,9 +62,9 @@ func newRabbitMQConn(prefetchCount int, prefetchGlobal bool, accountInfo string,
 	return ret
 }
 
-func (r *rabbitMQConn) connect(secure bool, config *amqp.Config) error {
+func (r *rabbitMQConn) connect(config *amqp.Config) error {
 	// try connect
-	if err := r.tryConnect(secure, config); err != nil {
+	if err := r.tryConnect(config); err != nil {
 		return err
 	}
 
@@ -66,18 +74,18 @@ func (r *rabbitMQConn) connect(secure bool, config *amqp.Config) error {
 	r.Unlock()
 
 	// create reconnect loop
-	go r.reconnect(secure, config)
+	go r.reconnect(config)
 	return nil
 }
 
-func (r *rabbitMQConn) reconnect(secure bool, config *amqp.Config) {
+func (r *rabbitMQConn) reconnect(config *amqp.Config) {
 	// skip first connect
 	var connect bool
 
 	for {
 		if connect {
 			// try reconnect
-			if err := r.tryConnect(secure, config); err != nil {
+			if err := r.tryConnect(config); err != nil {
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -110,7 +118,7 @@ func (r *rabbitMQConn) reconnect(secure bool, config *amqp.Config) {
 	}
 }
 
-func (r *rabbitMQConn) Connect(secure bool, config *amqp.Config) error {
+func (r *rabbitMQConn) Connect(config *amqp.Config) error {
 	r.Lock()
 	// already connected
 	if r.connected {
@@ -129,7 +137,7 @@ func (r *rabbitMQConn) Connect(secure bool, config *amqp.Config) error {
 
 	r.Unlock()
 
-	return r.connect(secure, config)
+	return r.connect(config)
 }
 
 func (r *rabbitMQConn) Close() error {
@@ -147,19 +155,9 @@ func (r *rabbitMQConn) Close() error {
 }
 
 // registry 에서 rabbitmq서비스 정보를 얻어와 연결 시도
-func (r *rabbitMQConn) doTryConnect(secure bool, config *amqp.Config) error {
+func (r *rabbitMQConn) doTryConnect(config *amqp.Config) error {
 	var err error
 	url := "amqp://" + r.accountInfo + "@" + r.address + "/"
-
-	if secure || config.TLSClientConfig != nil || strings.HasPrefix(url, "amqps://") {
-		if config.TLSClientConfig == nil {
-			config.TLSClientConfig = &tls.Config{
-				InsecureSkipVerify: true,
-			}
-		}
-
-		url = strings.Replace(url, "amqp://", "amqps://", 1)
-	}
 
 	r.Connection, err = amqp.DialConfig(url, *config)
 	if err == nil { //Connection success
@@ -170,36 +168,66 @@ func (r *rabbitMQConn) doTryConnect(secure bool, config *amqp.Config) error {
 	return errors.New("could not connect to openstack notification")
 }
 
-func (r *rabbitMQConn) tryConnect(secure bool, config *amqp.Config) error {
+func (r *rabbitMQConn) tryConnect(config *amqp.Config) error {
 	var err error
 
 	if config == nil {
 		config = &defaultAmqpConfig
 	}
 
-	if err = r.doTryConnect(secure, config); err != nil {
+	if err = r.doTryConnect(config); err != nil {
+		return err
+	}
+
+	c, err := r.Connection.Channel()
+	if err != nil {
+		return err
+	}
+
+	_, err = c.QueueDeclare(
+		"cdm-cluster-manager",
+		false, // durable
+		true,  // autoDelete
+		false, // exclusive
+		false, // noWait
+		nil,   // args
+	)
+	if err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *rabbitMQConn) Consume(queue string, autoAck bool) (*amqp.Channel, <-chan amqp.Delivery, error) {
+func (r *rabbitMQConn) Consume() (*amqp.Channel, <-chan amqp.Delivery, error) {
 	c, err := r.Connection.Channel()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	deliveries, err := c.Consume(queue,
-		"",      // consumer
-		autoAck, // auto-ack
-		false,   // exclusive
-		false,   // no local
-		false,   // no wait
-		nil,     // arguments
+	deliveries, err := c.Consume(
+		"cdm-cluster-manager",
+		"",    // consumer
+		false, // auto-ack
+		false, // exclusive
+		false, // no local
+		false, // no wait
+		nil,   // arguments
 	)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	for _, exchange := range openstackExchange {
+		if err := c.QueueBind(
+			"cdm-cluster-manager", // queue
+			"#",                   // key
+			exchange,              // exchange
+			false,                 // noWait
+			nil,                   // args
+		); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	return c, deliveries, nil

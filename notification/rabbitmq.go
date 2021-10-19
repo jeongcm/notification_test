@@ -3,21 +3,12 @@ package notification
 // Package rabbitmq provides a RabbitMQ Openstack Monitor
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"github.com/streadway/amqp"
 	"log"
-	"net"
-	"net/url"
 	"sync"
-	"test/monitor"
 	"time"
 )
-
-func init() {
-	monitor.RegisterClusterMonitorCreationFunc("type.openstack", New)
-}
 
 // OsloMessage notification event message body 구조체
 type OsloMessage struct {
@@ -27,7 +18,6 @@ type OsloMessage struct {
 
 type notification struct {
 	conn           *rabbitMQConn
-	opts           monitor.Options
 	prefetchCount  int
 	prefetchGlobal bool
 	mtx            sync.Mutex
@@ -39,7 +29,6 @@ type notification struct {
 type subscriber struct {
 	mtx       sync.Mutex
 	mayRun    bool
-	opts      monitor.SubscribeOptions
 	ch        *amqp.Channel
 	queueArgs map[string]interface{}
 	notifier  *notification
@@ -49,21 +38,39 @@ type subscriber struct {
 
 type publication struct {
 	d   amqp.Delivery
-	m   *monitor.Message
+	m   *Message
 	t   string
 	err error
+}
+
+// Handler is used to process messages via a subscription of a topic.
+// The handler is passed a publication interface which contains the
+// message and optional Ack method to acknowledge receipt of the message.
+type Handler func(Event) error
+
+// Message structure for monitor
+type Message struct {
+	Header map[string]string
+	Body   []byte
+}
+
+// Event is given to a subscription handler for processing
+type Event interface {
+	Topic() string
+	Message() *Message
+}
+
+// Subscriber is a convenience return type for the Subscribe method
+type Subscriber interface {
+	Unsubscribe() error
 }
 
 func (p *publication) Topic() string {
 	return p.t
 }
 
-func (p *publication) Message() *monitor.Message {
+func (p *publication) Message() *Message {
 	return p.m
-}
-
-func (s *subscriber) Options() monitor.SubscribeOptions {
-	return s.opts
 }
 
 func (s *subscriber) Unsubscribe() error {
@@ -107,10 +114,7 @@ func (s *subscriber) resubscribe() {
 			s.notifier.mtx.Unlock()
 			continue
 		}
-		ch, sub, err := s.notifier.conn.Consume(
-			s.opts.Queue,
-			s.opts.AutoAck,
-		)
+		ch, sub, err := s.notifier.conn.Consume()
 
 		s.notifier.mtx.Unlock()
 		switch err {
@@ -135,42 +139,9 @@ func (s *subscriber) resubscribe() {
 	}
 }
 
-// 큐를 지속적으로 유지하기위해 DurableQueue옵션, 데이터 안정성을 위해 DisableAutoAck, AckOnSuccess를 사용한다
-// 특히 핸들러 에러 시 메시지의 requeue여부를 플래그로 전달하며 이 플래그에 따라 RequeueOnError() 옵션을 호출한다.
-func (n *notification) Subscribe(queueName string, handler monitor.Handler, requeueOnError bool, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
-	opts = append(opts, monitor.Queue(queueName), monitor.DisableAutoAck())
-
-	if requeueOnError == true {
-		opts = append(opts, RequeueOnError())
-	}
-
-	return n.subscribe(handler, opts...)
-}
-
-func (n *notification) subscribe(handler monitor.Handler, opts ...monitor.SubscribeOption) (monitor.Subscriber, error) {
+func (n *notification) Subscribe(handler Handler) (Subscriber, error) {
 	if n.conn == nil {
 		return nil, errors.New("not connected openstack notification")
-	}
-
-	options := monitor.SubscribeOptions{
-		Context: context.Background(),
-		AutoAck: true,
-	}
-	for _, o := range opts {
-		o(&options)
-	}
-
-	var requeueOnError bool
-	requeueOnError, _ = options.Context.Value(requeueOnErrorKey{}).(bool)
-
-	var qArgs map[string]interface{}
-	if qa, ok := options.Context.Value(queueArgumentsKey{}).(map[string]interface{}); ok {
-		qArgs = qa
-	}
-
-	var headers map[string]interface{}
-	if h, ok := options.Context.Value(headersKey{}).(map[string]interface{}); ok {
-		headers = h
 	}
 
 	fn := func(msg amqp.Delivery) {
@@ -178,34 +149,26 @@ func (n *notification) subscribe(handler monitor.Handler, opts ...monitor.Subscr
 		for k, v := range msg.Headers {
 			header[k], _ = v.(string)
 		}
-		m := &monitor.Message{
+		m := &Message{
 			Header: header,
 			Body:   msg.Body,
 		}
 
 		p := &publication{d: msg, m: m, t: msg.RoutingKey}
 		p.err = handler(p)
-		if p.err == nil && !options.AutoAck {
-			if err := msg.Ack(false); err != nil {
-				log.Printf("could not acknowledge on a delivery. cause: %v\n", err)
-			}
-		} else if p.err != nil && !options.AutoAck {
-			if err := msg.Nack(false, requeueOnError); err != nil {
+		if p.err != nil {
+			if err := msg.Nack(false, false); err != nil {
 				log.Printf("could not negatively acknowledge on a delivery. cause: %v\n", err)
 			}
 		}
 	}
 
-	sret := &subscriber{opts: options, mayRun: true, notifier: n,
-		fn: fn, headers: headers, queueArgs: qArgs}
+	sret := &subscriber{mayRun: true, notifier: n,
+		fn: fn}
 
 	go sret.resubscribe()
 
 	return sret, nil
-}
-
-func (n *notification) Options() monitor.Options {
-	return n.opts
 }
 
 func (n *notification) Connect() error {
@@ -220,9 +183,8 @@ func (n *notification) Connect() error {
 	}
 
 	conf := defaultAmqpConfig
-	conf.TLSClientConfig = n.opts.TLSConfig
 
-	if err := conn.Connect(n.opts.Secure, &conf); err != nil {
+	if err := conn.Connect(&conf); err != nil {
 		return err
 	}
 
@@ -240,28 +202,4 @@ func (n *notification) Disconnect() error {
 
 	n.wg.Wait() // wait all goroutines
 	return ret
-}
-
-// New 함수는 새로운 monitor interface 를 생성한다.
-func New(serverURL string) monitor.Monitor {
-	//TODO auth 의 경우 임시로 ID:PASSWORD(ex.guest:guest)를 쓰지만
-	//	   사용자 입력에 의한 Cluster 의 MetaData 로 저장될 필요가 있음.
-	//     마찬가지로 임시로 client 의 api server url 과 고정된 port(ex.192.168.1.1:5672) 를 쓰지만
-	//     사용자 입력에 의한 Cluster 의 MetaData 로 저장될 필요가 있음.
-	auth := "guest:guest"
-	defaultPort := "5672"
-
-	u, _ := url.Parse(serverURL)
-	ip, _, _ := net.SplitHostPort(u.Host)
-
-	options := monitor.Options{
-		Context: context.Background(),
-	}
-
-	log.Println(fmt.Sprintf("%s:%s", ip, defaultPort))
-	return &notification{
-		opts:    options,
-		auth:    auth,
-		address: fmt.Sprintf("%s:%s", ip, defaultPort),
-	}
 }
