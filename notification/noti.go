@@ -11,6 +11,10 @@ import (
 	"test/monitor"
 )
 
+func init() {
+	monitor.RegisterClusterMonitorCreationFunc("type.openstack", New)
+}
+
 type notificationSubscriber struct {
 	cluster uint64
 }
