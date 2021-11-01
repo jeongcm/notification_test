@@ -185,7 +185,7 @@ func (n *notification) Connect() error {
 	conf := defaultAmqpConfig
 
 	if err := conn.Connect(&conf); err != nil {
-		return err
+		log.Fatalln(err)
 	}
 
 	n.conn = conn

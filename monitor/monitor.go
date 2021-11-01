@@ -1,7 +1,6 @@
 package monitor
 
 import (
-	"context"
 	"errors"
 )
 
@@ -20,8 +19,9 @@ func RegisterClusterMonitorCreationFunc(typeCode string, fn clusterMonitorCreati
 
 // Monitor monitor 인터페이스
 type Monitor interface {
-	Start(context.Context) error
+	Start() error
 	Stop()
+	Connect() error
 }
 
 // New 는 클러스터 타입별 모니터 인터페이스를 초기화하는 함수

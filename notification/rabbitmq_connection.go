@@ -5,7 +5,7 @@ package notification
 //
 
 import (
-	"errors"
+	"github.com/micro/go-micro/v2/logger"
 	"github.com/streadway/amqp"
 	"log"
 	"sync"
@@ -21,7 +21,7 @@ var (
 		Locale:    "en_US",
 	}
 
-	openstackExchange = []string{"cinder", "nova", "keystone", "neutron"}
+	openstackExchange = []string{"openstack", "keystone", "cinder", "nova", "neutron"}
 )
 
 type rabbitMQConn struct {
@@ -63,8 +63,10 @@ func newRabbitMQConn(prefetchCount int, prefetchGlobal bool, accountInfo string,
 }
 
 func (r *rabbitMQConn) connect(config *amqp.Config) error {
+
 	// try connect
 	if err := r.tryConnect(config); err != nil {
+		logger.Error(err)
 		return err
 	}
 
@@ -86,6 +88,7 @@ func (r *rabbitMQConn) reconnect(config *amqp.Config) {
 		if connect {
 			// try reconnect
 			if err := r.tryConnect(config); err != nil {
+				logger.Error(err)
 				time.Sleep(1 * time.Second)
 				continue
 			}
@@ -161,11 +164,13 @@ func (r *rabbitMQConn) doTryConnect(config *amqp.Config) error {
 
 	r.Connection, err = amqp.DialConfig(url, *config)
 	if err == nil { //Connection success
-		log.Println("success to connect openstack notification.")
+		log.Printf("success to connect openstack notification. %s\n", url)
 		return nil
+	} else {
+		log.Fatalln("failed to connect")
 	}
 
-	return errors.New("could not connect to openstack notification")
+	return nil
 }
 
 func (r *rabbitMQConn) tryConnect(config *amqp.Config) error {
@@ -176,15 +181,18 @@ func (r *rabbitMQConn) tryConnect(config *amqp.Config) error {
 	}
 
 	if err = r.doTryConnect(config); err != nil {
+		log.Fatalln(err)
 		return err
 	}
+
+	log.Printf("im here")
 
 	c, err := r.Connection.Channel()
 	if err != nil {
 		return err
 	}
 
-	_, err = c.QueueDeclare(
+	q, err := c.QueueDeclare(
 		"cdm-cluster-manager",
 		false, // durable
 		true,  // autoDelete
@@ -193,8 +201,11 @@ func (r *rabbitMQConn) tryConnect(config *amqp.Config) error {
 		nil,   // args
 	)
 	if err != nil {
+		logger.Error(err)
 		return err
 	}
+
+	log.Print(q.Name)
 
 	return nil
 }
@@ -207,12 +218,12 @@ func (r *rabbitMQConn) Consume() (*amqp.Channel, <-chan amqp.Delivery, error) {
 
 	deliveries, err := c.Consume(
 		"cdm-cluster-manager",
-		"",    // consumer
-		false, // auto-ack
-		false, // exclusive
-		false, // no local
-		false, // no wait
-		nil,   // arguments
+		"cdm-cluster-manager", // consumer
+		false,                 // auto-ack
+		false,                 // exclusive
+		false,                 // no local
+		false,                 // no wait
+		nil,                   // arguments
 	)
 	if err != nil {
 		return nil, nil, err

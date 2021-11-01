@@ -1,11 +1,8 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"log"
 	"test/monitor"
-
 	_ "test/notification"
 )
 
@@ -43,45 +40,8 @@ type ClusterPasswordAuthUserDomain struct {
 	Name string `json:"name,omitempty"`
 }
 
-type notificationSubscriber struct {
-	cluster string
-}
-
-func clusterNotificationSubscriber() {
-	ctx := context.Background()
-	go func() {
-		n, err := monitor.New("type.openstack", "http://172.16.194.168:8080")
-		if err != nil {
-			return
-		}
-
-		if err := n.Connect(); err != nil {
-			log.Println(err)
-			return
-		}
-		defer func() {
-			_ = n.Disconnect()
-		}()
-
-		ns := notificationSubscriber{
-			cluster: "test",
-		}
-		s, err := n.Subscribe("notifications.info", ns.subscribeEvent, true)
-		if err != nil {
-			log.Println("failed to register cluster notification subscribe.")
-			return
-		}
-		defer func() {
-			_ = s.Unsubscribe()
-		}()
-
-		log.Println("Success to register cluster notification subscribe.")
-
-		<-ctx.Done()
-	}()
-}
-
-func (ns *notificationSubscriber) subscribeEvent(p monitor.Event) error {
+/*
+func (ns *notificationSubscriber) subscribeEvent(p notification.Event) error {
 	var e map[string]interface{}
 
 	err := json.Unmarshal(p.Message().Body, &e)
@@ -147,9 +107,9 @@ func (ns *notificationSubscriber) subscribeEvent(p monitor.Event) error {
 
 	return nil
 }
-
+*/
 func main() {
-	//amqpServerURL := "amqp://guest:guest@192.168.10.32:5672/"
+	//amqpServerURL := "amqp://guest:guest@192.168.1.89:5672/"
 	//
 	//// Create a new RabbitMQ connection.
 	//connectRabbitMQ, err := amqp.Dial(amqpServerURL)
@@ -165,29 +125,57 @@ func main() {
 	//	panic(err)
 	//}
 	//defer channelRabbitMQ.Close()
-	//// Subscribing to QueueService1 for getting messages.
-	//messages, err := channelRabbitMQ.Consume(
-	//	"notifications.info", // queue name
-	//	"",              // consumer
-	//	true,            // auto-ack
-	//	false,           // exclusive
-	//	false,           // no local
-	//	false,           // no wait
-	//	nil,             // arguments
+
+	//_, err = channelRabbitMQ.QueueDeclare(
+	//	"test",
+	//	false, // durable
+	//	true,  // autoDelete
+	//	false, // exclusive
+	//	false, // noWait
+	//	nil,  // args
 	//)
 	//if err != nil {
-	//	log.Println(err)
+	//	panic(err)
 	//}
 	//
-	//// Build a welcome message.
-	//log.Println("Successfully connected to RabbitMQ")
-	//log.Println("Waiting for messages")
+	////if err = channelRabbitMQ.ExchangeDeclare(
+	////	"openstack",
+	////	"topic",
+	////	false,
+	////	false,
+	////	false,
+	////	false,
+	////	nil,
+	////); err != nil {
+	////	panic(err)
+	////}
 	//
-	//// Make a channel to receive messages into infinite loop.
-	//forever := make(chan bool)
+	//deliveries, err := channelRabbitMQ.Consume(
+	//	"test",
+	//	"",      // consumer
+	//	false, // auto-ack
+	//	false,   // exclusive
+	//	false,   // no local
+	//	false,   // no wait
+	//	nil,     // arguments
+	//)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//if err := channelRabbitMQ.QueueBind(
+	//	"test", // queue
+	//	"#",      // key
+	//	"keystone",
+	//	false,    // noWait
+	//	nil,     // args
+	//); err != nil {
+	//	panic(err)
+	//}
+	//
 	//
 	//go func() {
-	//	for message := range messages {
+	//	for message := range deliveries {
 	//		// For example, show received message in a console.
 	//		log.Printf("%s\n", message.Body)
 	//		var e map[string]interface{}
@@ -210,79 +198,93 @@ func main() {
 	//			fmt.Println(m.Payload["id"].(string))
 	//		case "identity.project.deleted":
 	//			fmt.Println(m.Payload["id"].(string))
+	//		case "volume.create.end":
+	//			fallthrough
+	//		case "volume.update.end":
+	//			fallthrough
+	//		case "volume.delete.end":
+	//			fmt.Println(m.Payload["volume_id"].(string))
 	//		}
 	//	}
 	//}()
-	//
-	//<-forever
-
-	//d := "{\"methods\": [\"password\"], \"password\": {\"user\": {\"domain\": {\"name\": \"default\"},\"name\": \"admin\",\"password\": \"admin\"}}}"
-	//
-	//var cred OpenstackCredential
-	//if err := json.Unmarshal([]byte(d), &cred); err != nil {
-	//	fmt.Println(err)
-	//	return
-	//}
-	//
-	//fmt.Println(cred)
-	//
-	//id := 1
-	//
-	//b, err := json.Marshal(&id)
+	//deliveries2, err := channelRabbitMQ.Consume(
+	//	"test2",
+	//	"",      // consumer
+	//	false, // auto-ack
+	//	false,   // exclusive
+	//	false,   // no local
+	//	false,   // no wait
+	//	nil,     // arguments
+	//)
 	//if err != nil {
-	//	fmt.Println(err)
-	//	return
+	//	panic(err)
 	//}
 	//
-	//var cid int32
-	//
-	//if err = json.Unmarshal(b, &cid); err != nil {
-	//	fmt.Println(err)
-	//	return
-	//}
-	//
-	//fmt.Println(cid)
-	//
-	//m := map[string]interface{}{"driver": "unknown"}
-	//
-	//_, ok := m["volume_backend_name"]
-	//if !ok {
-	//	fmt.Println("not found backend name")
-	//	return
-	//}
-	//
-	//
-	//
-	//fmt.Println(m["driver"].(string))
-	//
-	//	//ctx, cancel := context.WithTimeout(context.Background(), time.Minute*1)
-	//	//defer cancel()
-	//	i := make(chan interface{})
-	//
-	//	go func() {
-	//		for {
-	//
-	//			fmt.Println("hihi")
-	//
-	//			select {
-	//			case <-i:
-	//				fmt.Println("wait done")
-	//				return
-	//			case <-time.After(time.Second * 1):
-	//				continue
-	//			}
-	//		}
-	//	}()
 
-	//clusters := []string{"ee"}
+	// Build a welcome message.
+	//log.Println("Successfully connected to RabbitMQ")
+	//log.Println("Waiting for messages")
+
+	// Make a channel to receive messages into infinite loop.
+	//forever := make(chan bool)
 	//
-	//for _, c := range clusters {
-	//	log.Printf("hello")
-	//	log.Printf(c)
-	//}
+	//go func() {
+	//	for message := range deliveries2 {
+	//		// For example, show received message in a console.
+	//		//log.Printf("%s\n", message.Body)
+	//		var e map[string]interface{}
+	//		if err := json.Unmarshal(message.Body, &e); err != nil {
+	//			log.Fatalln(err)
+	//			return
+	//		}
+	//
+	//		var m OsloMessage
+	//		if err := json.Unmarshal([]byte(e["oslo.message"].(string)), &m); err != nil {
+	//			log.Fatalln(err)
+	//			return
+	//		}
+	//
+	//		//fmt.Println(m.EventType)
+	//		//fmt.Println(m.Payload)
+	//
+	//		switch m.EventType {
+	//		case "identity.project.created":
+	//			fmt.Println(m.Payload["id"].(string))
+	//		case "identity.project.deleted":
+	//			fmt.Println(m.Payload["id"].(string))
+	//		case "volume.create.end":
+	//			fmt.Println(m.Payload["volume_id"].(string))
+	//		case "volume.update.end":
+	//			fmt.Println(m.Payload["volume_id"].(string))
+	//		case "volume.delete.end":
+	//			fmt.Println(m.Payload["volume_id"].(string))
+	//		case "network.create.end":
+	//			fmt.Println(m.Payload["network"].(map[string]interface{})["id"].(string))
+	//		case "network.update.end":
+	//			fmt.Println(m.Payload["network"].(map[string]interface{})["id"].(string))
+	//		case "network.delete.end":
+	//			fmt.Println(m.Payload["network"].(map[string]interface{})["id"].(string))
+	//		}
+	//	}
+	//}()
+
 	forever := make(chan bool)
-	clusterNotificationSubscriber()
+	n, err := monitor.New("type.openstack", "http://172.16.194.168:5672")
+	if err != nil {
+		log.Fatalln("monitor init failed")
+	}
+
+	err = n.Start()
+	if err != nil {
+		log.Fatalln("monitor start failed")
+	}
+
+	//err = n.Connect()
+	//if err != nil {
+	//	log.Fatalln(err)
+	//}
+	//
+	//n.Stop()
 
 	<-forever
-
 }
