@@ -20,16 +20,43 @@ type notificationSubscriber struct {
 
 // Start openstack notification Start
 func (n *notification) Start() error {
+	var err error
 	if err := n.Connect(); err != nil {
 		return err
 	}
+
+	defer func() {
+		if err != nil {
+			_ = n.Disconnect()
+		}
+	}()
+
+	if err = n.DeclareQueue(); err != nil {
+		return err
+	}
+
+	if err = n.DeclareExchanges(); err != nil {
+		return err
+	}
+
+	if err = n.BindQueue(); err != nil {
+		return err
+	}
+
+	defer func() {
+		if err != nil {
+			if err = n.UnBindQueue(); err != nil {
+				logger.Warnf("Could not unbind openstack notification queue. cause: %v", err)
+			}
+		}
+	}()
 
 	logger.Info("Success to connect cluster notification.")
 
 	ns := notificationSubscriber{
 		cluster: 1,
 	}
-	_, err := n.Subscribe(ns.subscribeEvent)
+	_, err = n.Subscribe(ns.subscribeEvent)
 	if err != nil {
 		logger.Errorf("Could not register to cluster notification. Cause: %v", err)
 		_ = n.Disconnect()
@@ -43,10 +70,15 @@ func (n *notification) Start() error {
 
 // Stop openstack notification stop
 func (n *notification) Stop() {
+	if err := n.UnBindQueue(); err != nil {
+		log.Printf("could not unbind queue. cause: %v", err)
+	}
+
 	err := n.Disconnect()
 	if err != nil {
 		log.Fatalln(err)
 	}
+
 	logger.Infof("Close cluster notification.")
 }
 
@@ -65,87 +97,90 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 		return err
 	}
 
-	logger.Infof("%v", string(p.Message().Body))
+	log.Println(m.EventType)
 
-	////TODO message type 별 동기화진행
-	//switch m.EventType {
-	//case "identity.project.created":
-	//	fallthrough
-	//case "identity.project.updated":
-	//	fallthrough
-	//case "identity.project.deleted":
-	//	log.Printf("project notification %s\n", m.Payload["id"].(string))
-	//case "compute.instance.create.end":
-	//	fallthrough
-	//case "compute.instance.update":
-	//	fallthrough
-	//case "compute.instance.delete.end":
-	//	fallthrough
-	//case "compute.instance.suspend.end":
-	//	log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
-	//case "volume.attach.end":
-	//
-	//case "volume.create.end":
-	//	fallthrough
-	//case "volume.update.end":
-	//	fallthrough
-	//case "volume.delete.end":
-	//	log.Printf("volume notification %s\n", m.Payload["volume_id"].(string))
-	//case "snapshot.create.end":
-	//	fallthrough
-	//case "snapshot.update.end":
-	//	fallthrough
-	//case "snapshot.delete.end":
-	//	log.Printf("snapshot notification %s\n", m.Payload["snapshot_id"].(string))
-	//case "volume_type.create":
-	//	fallthrough
-	//case "volume_type.update":
-	//	fallthrough
-	//case "volume_type.delete":
-	//	log.Printf("storage notification %s\n", m.Payload["volume_types"].(map[string]interface{})["id"].(string))
-	//case "volume_type_project.access.add":
-	//case "volume_type_extra_specs.create":
-	//case "volume_type_extra_specs.delete":
-	//case "network.create.end":
-	//	fallthrough
-	//case "network.update.end":
-	//	fallthrough
-	//case "network.delete.end":
-	//	log.Printf("network notification %s\n", m.Payload["network"].(map[string]interface{})["id"].(string))
-	//case "subnet.create.end":
-	//	fallthrough
-	//case "subnet.update.end":
-	//	log.Printf("subnet notification %s\n", m.Payload["subnet"].(map[string]interface{})["id"].(string))
-	//case "security_group.create.end":
-	//	fallthrough
-	//case "security_group.update.end":
-	//	fallthrough
-	//case "security_group.delete.end":
-	//	log.Printf("sg notification %s\n", m.Payload["security_group"].(map[string]interface{})["id"].(string))
-	//case "security_group_rule.create.end":
-	//	fallthrough
-	//case "security_group_rule.update.end":
-	//	fallthrough
-	//case "security_group_rule.delete.end":
-	//	log.Printf("sg rule notification %s\n", m.Payload["security_group_rule"].(map[string]interface{})["id"].(string))
-	//case "router.create.end":
-	//	fallthrough
-	//case "router.update.end":
-	//	fallthrough
-	//case "router.delete.end":
-	//	log.Printf("router notification %s\n", m.Payload["router"].(map[string]interface{})["id"].(string))
-	//case "router.interface.create":
-	//case "floatingip.create.end":
-	//	fallthrough
-	//case "floatingip.update.end":
-	//	fallthrough
-	//case "floatingip.delete.end":
-	//	log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
-	//}
-	//if err != nil {
-	//	log.Printf("Failed to sync cluster from event notification. cause: %v\n", err)
-	//	return nil
-	//}
+	//TODO message type 별 동기화진행
+	switch m.EventType {
+	case "identity.project.created":
+		fallthrough
+	case "identity.project.updated":
+		fallthrough
+	case "identity.project.deleted":
+		log.Printf("project notification %s\n", m.Payload["id"].(string))
+	case "compute.instance.create.end":
+		fallthrough
+	case "compute.instance.update":
+		fallthrough
+	case "compute.instance.delete.end":
+		fallthrough
+	case "compute.instance.suspend.end":
+		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
+	case "volume.attach.end":
+		for _, instance := range m.Payload["volume_types"].([]map[string]interface{}) {
+			log.Printf("instance volume attached %s\n", instance["instance_uuid"].(string))
+		}
+	case "volume.create.end":
+		fallthrough
+	case "volume.update.end":
+		fallthrough
+	case "volume.delete.end":
+		log.Printf("volume notification %s\n", m.Payload["volume_id"].(string))
+	case "snapshot.create.end":
+		fallthrough
+	case "snapshot.update.end":
+		fallthrough
+	case "snapshot.delete.end":
+		log.Printf("snapshot notification %s\n", m.Payload["snapshot_id"].(string))
+	case "volume_type.create":
+		fallthrough
+	case "volume_type.update":
+		fallthrough
+	case "volume_type.delete":
+		log.Printf("storage notification %s\n", m.Payload["volume_types"].(map[string]interface{})["id"].(string))
+	case "volume_type_project.access.add":
+	case "volume_type_extra_specs.create":
+	case "volume_type_extra_specs.delete":
+	case "network.create.end":
+		fallthrough
+	case "network.update.end":
+		fallthrough
+	case "network.delete.end":
+		log.Printf("network notification %s\n", m.Payload["network"].(map[string]interface{})["id"].(string))
+	case "subnet.create.end":
+		fallthrough
+	case "subnet.update.end":
+		log.Printf("subnet notification %s\n", m.Payload["subnet"].(map[string]interface{})["id"].(string))
+	case "security_group.create.end":
+		fallthrough
+	case "security_group.update.end":
+		fallthrough
+	case "security_group.delete.end":
+		log.Printf("sg notification %s\n", m.Payload["security_group"].(map[string]interface{})["id"].(string))
+	case "security_group_rule.create.end":
+		fallthrough
+	case "security_group_rule.update.end":
+		fallthrough
+	case "security_group_rule.delete.end":
+		log.Printf("sg rule notification %s\n", m.Payload["security_group_rule"].(map[string]interface{})["id"].(string))
+	case "router.create.end":
+		fallthrough
+	case "router.update.end":
+		fallthrough
+	case "router.delete.end":
+		log.Printf("router notification %s\n", m.Payload["router"].(map[string]interface{})["id"].(string))
+	case "router.interface.create", "router.interface.delete":
+		log.Printf("router notification %s\n", m.Payload["router_interface"].(map[string]interface{})["id"].(string))
+	case "floatingip.create.end":
+		fallthrough
+	case "floatingip.update.end":
+		fallthrough
+	case "floatingip.delete.end":
+		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
+	}
+	if err != nil {
+		log.Printf("Failed to sync cluster from event notification. cause: %v\n", err)
+		return nil
+	}
 
 	return nil
 }
