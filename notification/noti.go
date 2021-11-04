@@ -35,18 +35,10 @@ func (n *notification) Start() error {
 		return err
 	}
 
-	if err = n.DeclareExchanges(); err != nil {
-		return err
-	}
-
-	if err = n.BindQueue(); err != nil {
-		return err
-	}
-
 	defer func() {
 		if err != nil {
-			if err = n.UnBindQueue(); err != nil {
-				logger.Warnf("Could not unbind openstack notification queue. cause: %v", err)
+			if err = n.DeleteQueue(); err != nil {
+				logger.Warnf("Could not delete openstack notification queue. cause: %v", err)
 			}
 		}
 	}()
@@ -70,10 +62,7 @@ func (n *notification) Start() error {
 
 // Stop openstack notification stop
 func (n *notification) Stop() {
-	if err := n.UnBindQueue(); err != nil {
-		log.Printf("could not unbind queue. cause: %v", err)
-	}
-
+	_ = n.DeleteQueue()
 	err := n.Disconnect()
 	if err != nil {
 		log.Fatalln(err)
@@ -115,10 +104,8 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 		fallthrough
 	case "compute.instance.suspend.end":
 		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
-	case "volume.attach.end":
-		for _, instance := range m.Payload["volume_types"].([]map[string]interface{}) {
-			log.Printf("instance volume attached %s\n", instance["instance_uuid"].(string))
-		}
+	case "compute.instance.volume.attach", "compute.instance.volume.detach":
+		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
 	case "volume.create.end":
 		fallthrough
 	case "volume.update.end":
@@ -149,6 +136,8 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 	case "subnet.create.end":
 		fallthrough
 	case "subnet.update.end":
+		fallthrough
+	case "subnet.delete.end":
 		log.Printf("subnet notification %s\n", m.Payload["subnet"].(map[string]interface{})["id"].(string))
 	case "security_group.create.end":
 		fallthrough

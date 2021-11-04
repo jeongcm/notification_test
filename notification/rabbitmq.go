@@ -223,6 +223,10 @@ func (n *notification) BindQueue() error {
 	return nil
 }
 
+func (n *notification) DeleteQueue() error {
+	return n.conn.deleteQueue()
+}
+
 func (n *notification) Disconnect() error {
 	if n.conn == nil {
 		return errors.New("connection is nil")

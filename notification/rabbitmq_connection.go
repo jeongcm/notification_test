@@ -194,6 +194,20 @@ func (r *rabbitMQConn) declareQueue() error {
 	return nil
 }
 
+func (r *rabbitMQConn) deleteQueue() error {
+	c, err := r.Connection.Channel()
+	if err != nil {
+		return err
+	}
+
+	_, err = c.QueueDelete("cdm-cluster-manager", false, false, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (r *rabbitMQConn) unBindQueue(exchange string) error {
 	c, err := r.Connection.Channel()
 	if err != nil {
