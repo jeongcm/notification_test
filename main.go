@@ -269,7 +269,7 @@ func main() {
 	//}()
 
 	forever := make(chan interface{})
-	n, err := monitor.New("type.openstack", "http://172.16.194.168:5672")
+	n, err := monitor.New("type.openstack", "http://192.168.10.32:5672")
 	if err != nil {
 		log.Fatalln("monitor init failed")
 	}

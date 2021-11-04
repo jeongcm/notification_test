@@ -196,24 +196,6 @@ func (n *notification) DeclareQueue() error {
 	return n.conn.declareQueue()
 }
 
-func (n *notification) UnBindQueue() error {
-	for _, ex := range openstackExchange {
-		if err := n.conn.unBindQueue(ex); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (n *notification) DeclareExchanges() error {
-	for _, ex := range openstackExchange {
-		if err := n.conn.declareExchanges(ex); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (n *notification) BindQueue() error {
 	for _, ex := range openstackExchange {
 		if err := n.conn.bindQueue(ex); err != nil {

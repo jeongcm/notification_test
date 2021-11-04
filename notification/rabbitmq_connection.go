@@ -290,6 +290,21 @@ func (r *rabbitMQConn) Consume() (*amqp.Channel, <-chan amqp.Delivery, error) {
 		return nil, nil, err
 	}
 
+	_, err = c.QueueDeclare("cdm-cluster-manager", false, true, false, false, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, ex := range openstackExchange {
+		if err = c.ExchangeDeclare(ex, "topic", false, false, false, false, nil); err != nil {
+			return nil, nil, err
+		}
+
+		if err = c.QueueBind("cdm-cluster-manager", "#", ex, false, nil); err != nil {
+			return nil, nil, err
+		}
+	}
+
 	deliveries, err := c.Consume(
 		"cdm-cluster-manager",
 		"cdm-cluster-manager", // consumer
