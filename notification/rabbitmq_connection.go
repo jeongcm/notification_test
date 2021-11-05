@@ -173,27 +173,6 @@ func (r *rabbitMQConn) doTryConnect(config *amqp.Config) error {
 	return nil
 }
 
-func (r *rabbitMQConn) declareQueue() error {
-	c, err := r.Connection.Channel()
-	if err != nil {
-		return err
-	}
-
-	_, err = c.QueueDeclare(
-		"cdm-cluster-manager",
-		false, // durable
-		true,  // autoDelete
-		false, // exclusive
-		false, // noWait
-		nil,   // args
-	)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (r *rabbitMQConn) deleteQueue() error {
 	c, err := r.Connection.Channel()
 	if err != nil {
@@ -202,67 +181,6 @@ func (r *rabbitMQConn) deleteQueue() error {
 
 	_, err = c.QueueDelete("cdm-cluster-manager", false, false, false)
 	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *rabbitMQConn) unBindQueue(exchange string) error {
-	c, err := r.Connection.Channel()
-	if err != nil {
-		return err
-	}
-
-	if err := c.QueueUnbind(
-		"cdm-cluster-manager", // queue
-		"#",                   // key
-		exchange,              // exchange
-		nil,                   // args
-	); err != nil {
-		logger.Warn(err)
-		return err
-	}
-
-	_ = c.Close()
-
-	return nil
-}
-
-func (r *rabbitMQConn) declareExchanges(exchange string) error {
-	c, err := r.Connection.Channel()
-	if err != nil {
-		return err
-	}
-
-	if err = c.ExchangeDeclare(
-		exchange,
-		"topic",
-		false,
-		false,
-		false,
-		false,
-		nil,
-	); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (r *rabbitMQConn) bindQueue(exchange string) error {
-	c, err := r.Connection.Channel()
-	if err != nil {
-		return err
-	}
-
-	if err = c.QueueBind(
-		"cdm-cluster-manager", // queue
-		"#",                   // key
-		exchange,              // exchange
-		false,                 // noWait
-		nil,                   // args
-	); err != nil {
 		return err
 	}
 

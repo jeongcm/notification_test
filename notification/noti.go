@@ -14,41 +14,27 @@ func init() {
 	monitor.RegisterClusterMonitorCreationFunc("type.openstack", New)
 }
 
-type notificationSubscriber struct {
+type notificationHandler struct {
 	cluster uint64
 }
 
 // Start openstack notification Start
 func (n *notification) Start() error {
-	var err error
 	if err := n.Connect(); err != nil {
 		return err
 	}
 
-	defer func() {
-		if err != nil {
-			_ = n.Disconnect()
-		}
-	}()
-
-	if err = n.DeclareQueue(); err != nil {
-		return err
+	if err := n.DeleteQueue(); err != nil {
+		logger.Warnf("Could not delete openstack notification queue. cause: %v", err)
 	}
-
-	defer func() {
-		if err != nil {
-			if err = n.DeleteQueue(); err != nil {
-				logger.Warnf("Could not delete openstack notification queue. cause: %v", err)
-			}
-		}
-	}()
 
 	logger.Info("Success to connect cluster notification.")
 
-	ns := notificationSubscriber{
+	ns := notificationHandler{
 		cluster: 1,
 	}
-	_, err = n.Subscribe(ns.subscribeEvent)
+
+	_, err := n.Subscribe(ns.handleEvent)
 	if err != nil {
 		logger.Errorf("Could not register to cluster notification. Cause: %v", err)
 		_ = n.Disconnect()
@@ -62,16 +48,11 @@ func (n *notification) Start() error {
 
 // Stop openstack notification stop
 func (n *notification) Stop() {
-	_ = n.DeleteQueue()
-	err := n.Disconnect()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
+	_ = n.Disconnect()
 	logger.Infof("Close cluster notification.")
 }
 
-func (ns *notificationSubscriber) subscribeEvent(p Event) error {
+func (ns *notificationHandler) handleEvent(p Event) error {
 	var e map[string]interface{}
 
 	err := json.Unmarshal(p.Message().Body, &e)
@@ -171,7 +152,7 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 		}
 
 		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
-
+		log.Printf("%s\n", string(p.Message().Body))
 	case "port.update.end":
 		// instance attach port interface
 		if m.Payload["port"].(map[string]interface{})["device_owner"].(string) == "compute:nova" {
@@ -179,7 +160,7 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 
 		}
 		log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_owner"].(string))
-
+		log.Printf("%s\n", string(p.Message().Body))
 	}
 	if err != nil {
 		log.Printf("Failed to sync cluster from event notification. cause: %v\n", err)

@@ -192,19 +192,6 @@ func (n *notification) Connect() error {
 	return nil
 }
 
-func (n *notification) DeclareQueue() error {
-	return n.conn.declareQueue()
-}
-
-func (n *notification) BindQueue() error {
-	for _, ex := range openstackExchange {
-		if err := n.conn.bindQueue(ex); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (n *notification) DeleteQueue() error {
 	return n.conn.deleteQueue()
 }
