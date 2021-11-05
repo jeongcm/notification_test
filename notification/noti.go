@@ -161,10 +161,25 @@ func (ns *notificationSubscriber) subscribeEvent(p Event) error {
 		log.Printf("router notification %s\n", m.Payload["router_interface"].(map[string]interface{})["id"].(string))
 	case "floatingip.create.end":
 		fallthrough
-	case "floatingip.update.end":
-		fallthrough
 	case "floatingip.delete.end":
 		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
+
+	case "floatingip.update.end":
+		// floating ip attach instance
+		if m.Payload["floatingip"].(map[string]interface{})["port_id"] != nil {
+			log.Printf("floating ip notification port id := %s\n", m.Payload["floatingip"].(map[string]interface{})["port_id"].(string))
+		}
+
+		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
+
+	case "port.update.end":
+		// instance attach port interface
+		if m.Payload["port"].(map[string]interface{})["device_owner"].(string) == "compute:nova" {
+			log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_id"].(string))
+
+		}
+		log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_owner"].(string))
+
 	}
 	if err != nil {
 		log.Printf("Failed to sync cluster from event notification. cause: %v\n", err)
