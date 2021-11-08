@@ -77,6 +77,8 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		fallthrough
 	case "identity.project.deleted":
 		log.Printf("project notification %s\n", m.Payload["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "compute.instance.create.end":
 		fallthrough
 	case "compute.instance.update":
@@ -85,26 +87,36 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		fallthrough
 	case "compute.instance.suspend.end":
 		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "compute.instance.volume.attach", "compute.instance.volume.detach":
 		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "volume.create.end":
 		fallthrough
 	case "volume.update.end":
 		fallthrough
 	case "volume.delete.end":
 		log.Printf("volume notification %s\n", m.Payload["volume_id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "snapshot.create.end":
 		fallthrough
 	case "snapshot.update.end":
 		fallthrough
 	case "snapshot.delete.end":
 		log.Printf("snapshot notification %s\n", m.Payload["snapshot_id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "volume_type.create":
 		fallthrough
 	case "volume_type.update":
 		fallthrough
 	case "volume_type.delete":
 		log.Printf("storage notification %s\n", m.Payload["volume_types"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "volume_type_project.access.add":
 	case "volume_type_extra_specs.create":
 	case "volume_type_extra_specs.delete":
@@ -114,36 +126,49 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		fallthrough
 	case "network.delete.end":
 		log.Printf("network notification %s\n", m.Payload["network"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "subnet.create.end":
 		fallthrough
 	case "subnet.update.end":
 		fallthrough
 	case "subnet.delete.end":
 		log.Printf("subnet notification %s\n", m.Payload["subnet"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "security_group.create.end":
 		fallthrough
 	case "security_group.update.end":
 		fallthrough
 	case "security_group.delete.end":
 		log.Printf("sg notification %s\n", m.Payload["security_group"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "security_group_rule.create.end":
 		fallthrough
 	case "security_group_rule.update.end":
 		fallthrough
 	case "security_group_rule.delete.end":
 		log.Printf("sg rule notification %s\n", m.Payload["security_group_rule"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "router.create.end":
 		fallthrough
 	case "router.update.end":
 		fallthrough
 	case "router.delete.end":
 		log.Printf("router notification %s\n", m.Payload["router"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "router.interface.create", "router.interface.delete":
 		log.Printf("router notification %s\n", m.Payload["router_interface"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "floatingip.create.end":
 		fallthrough
 	case "floatingip.delete.end":
 		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
 
 	case "floatingip.update.end":
 		// floating ip attach instance
@@ -157,6 +182,7 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		// instance attach port interface
 		if m.Payload["port"].(map[string]interface{})["device_owner"].(string) == "compute:nova" {
 			log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_id"].(string))
+			log.Printf("%s\n", string(p.Message().Body))
 
 		}
 		log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_owner"].(string))
