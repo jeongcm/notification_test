@@ -174,19 +174,25 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		// floating ip attach instance
 		if m.Payload["floatingip"].(map[string]interface{})["port_id"] != nil {
 			log.Printf("floating ip notification port id := %s\n", m.Payload["floatingip"].(map[string]interface{})["port_id"].(string))
+		} else {
+			log.Printf("floating ip notification floating id := %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
 		}
 
-		log.Printf("floating ip notification %s\n", m.Payload["floatingip"].(map[string]interface{})["id"].(string))
 		log.Printf("%s\n", string(p.Message().Body))
-	case "port.update.end":
+
+	case "port.update.end", "port.delete.end":
 		// instance attach port interface
 		if m.Payload["port"].(map[string]interface{})["device_owner"].(string) == "compute:nova" {
 			log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_id"].(string))
 			log.Printf("%s\n", string(p.Message().Body))
-
 		}
+
 		log.Printf("port notification %s\n", m.Payload["port"].(map[string]interface{})["device_owner"].(string))
 		log.Printf("%s\n", string(p.Message().Body))
+
+	case "scheduler.retype":
+		log.Printf("%s\n", string(p.Message().Body))
+
 	}
 	if err != nil {
 		log.Printf("Failed to sync cluster from event notification. cause: %v\n", err)
