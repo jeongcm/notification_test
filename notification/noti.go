@@ -89,9 +89,13 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
 		log.Printf("%s\n", string(p.Message().Body))
 
-	case "compute.instance.volume.attach", "compute.instance.volume.detach":
+	case "volume.attach.end", "volume.detach.end":
 		log.Printf("instance notification %s\n", m.Payload["instance_id"].(string))
 		log.Printf("%s\n", string(p.Message().Body))
+
+		for _, attachment := range m.Payload["volume_attachment"].([]map[string]interface{}) {
+			log.Printf("attachment instance uuid = %s\n", attachment["instance_uuid"].(string))
+		}
 
 	case "volume.create.end":
 		fallthrough
@@ -101,12 +105,18 @@ func (ns *notificationHandler) handleEvent(p Event) error {
 		log.Printf("volume notification %s\n", m.Payload["volume_id"].(string))
 		log.Printf("%s\n", string(p.Message().Body))
 
+	case "volume.resize.end":
+		log.Printf("%s\n", string(p.Message().Body))
+
 	case "snapshot.create.end":
 		fallthrough
 	case "snapshot.update.end":
 		fallthrough
 	case "snapshot.delete.end":
 		log.Printf("snapshot notification %s\n", m.Payload["snapshot_id"].(string))
+		log.Printf("%s\n", string(p.Message().Body))
+
+	case "snapshot.reset_status.end":
 		log.Printf("%s\n", string(p.Message().Body))
 
 	case "volume_type.create":
